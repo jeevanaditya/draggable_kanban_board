@@ -214,21 +214,21 @@ onMounted(() => {
           :class="activeView === 'board' ? 'nav-chip-active' : ''"
           @click="setView('board')"
         >
-          board
+          Board
         </span>
         <span
           class="nav-chip"
           :class="activeView === 'timeline' ? 'nav-chip-active' : ''"
           @click="setView('timeline')"
         >
-          timeline
+          Timeline
         </span>
         <span
           class="nav-chip"
           :class="activeView === 'settings' ? 'nav-chip-active' : ''"
           @click="setView('settings')"
         >
-          settings
+          Settings
         </span>
       </nav>
       <div class="global-profile">
@@ -545,18 +545,21 @@ onMounted(() => {
 }
 
 .nav-chip {
-  font-size: 12px;
-  padding: 6px 10px;
+  font-size: 13px;
+  padding: 7px 12px;
   border-radius: 999px;
   border: 1px solid transparent;
-  opacity: 0.68;
+  opacity: 0.82;
+  font-weight: 600;
   cursor: pointer;
   user-select: none;
 }
 
 .nav-chip-active {
-  border-color: rgba(255, 255, 255, 0.38);
+  border-color: rgba(255, 255, 255, 0.7);
   opacity: 1;
+  background: radial-gradient(circle at 0 0, rgba(255, 255, 255, 0.16), transparent 60%),
+    rgba(12, 18, 38, 0.96);
 }
 
 .global-profile {
