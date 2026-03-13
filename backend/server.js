@@ -42,10 +42,14 @@ app.get('/api/tasks', async (req, res) => {
 })
 
 app.post('/api/tasks', async (req, res) => {
-  const { title, description } = req.body
+  const { title, description, status } = req.body
   if (!title) {
     return res.status(400).json({ message: 'Title is required' })
   }
+
+  const nextStatus = ['todo', 'in-progress', 'done'].includes(status)
+    ? status
+    : 'todo'
 
   if (!dbReady) {
     const now = new Date()
@@ -53,7 +57,7 @@ app.post('/api/tasks', async (req, res) => {
       _id: `${now.getTime()}-${Math.random().toString(16).slice(2)}`,
       title,
       description: description || '',
-      status: 'todo',
+      status: nextStatus,
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
     }
@@ -62,7 +66,7 @@ app.post('/api/tasks', async (req, res) => {
   }
 
   try {
-    const task = await Task.create({ title, description })
+    const task = await Task.create({ title, description, status: nextStatus })
     res.status(201).json(task)
   } catch (error) {
     console.error('Create task error', error)

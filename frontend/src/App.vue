@@ -5,10 +5,14 @@ const loading = ref(false)
 const error = ref('')
 const creating = ref(false)
 
+const activeView = ref('board')
+const showStreak = ref(true)
+const defaultStatus = ref('todo')
+
 const columns = ref([
-  { id: 'todo', title: 'Spark', accent: '#ff7a7a' },
-  { id: 'in-progress', title: 'Flow', accent: '#ffd56a' },
-  { id: 'done', title: 'Glow', accent: '#6bffce' },
+  { id: 'todo', title: 'To Do', accent: '#ff7a7a' },
+  { id: 'in-progress', title: 'In Progress', accent: '#ffd56a' },
+  { id: 'done', title: 'Done', accent: '#6bffce' },
 ])
 
 const tasks = ref([])
@@ -28,6 +32,40 @@ const columnTasks = computed(() =>
   }, {})
 )
 
+const activityStrip = computed(() => {
+  const today = new Date()
+  const days = []
+  for (let index = 6; index >= 0; index -= 1) {
+    const date = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate() - index
+    )
+    const label = date.toLocaleDateString(undefined, { weekday: 'short' })
+    const count = tasks.value.filter(task => {
+      if (!task.createdAt) return false
+      const created = new Date(task.createdAt)
+      return (
+        created.getFullYear() === date.getFullYear() &&
+        created.getMonth() === date.getMonth() &&
+        created.getDate() === date.getDate()
+      )
+    }).length
+    days.push({ label, count })
+  }
+  return days
+})
+
+const timelineItems = computed(() =>
+  [...tasks.value].sort((first, second) => {
+    const firstTime = first.createdAt ? new Date(first.createdAt).getTime() : 0
+    const secondTime = second.createdAt
+      ? new Date(second.createdAt).getTime()
+      : 0
+    return firstTime - secondTime
+  })
+)
+
 const columnCountLabel = id => {
   const bucket = columnTasks.value[id] || []
   if (!bucket.length) return 'Empty'
@@ -38,6 +76,20 @@ const columnCountLabel = id => {
 const resetDraft = () => {
   draftTitle.value = ''
   draftDescription.value = ''
+}
+
+const setView = view => {
+  activeView.value = view
+}
+
+const persistDefaultStatus = () => {
+  if (['todo', 'in-progress', 'done'].includes(defaultStatus.value)) {
+    window.localStorage.setItem('orbit-default-status', defaultStatus.value)
+  }
+}
+
+const persistShowStreak = () => {
+  window.localStorage.setItem('orbit-show-streak', showStreak.value ? '1' : '0')
 }
 
 const loadTasks = async () => {
@@ -68,6 +120,7 @@ const createTask = async () => {
       body: JSON.stringify({
         title: draftTitle.value.trim(),
         description: draftDescription.value.trim(),
+        status: defaultStatus.value,
       }),
     })
     if (!response.ok) {
@@ -139,16 +192,56 @@ const handleColumnLeave = id => {
 }
 
 onMounted(() => {
+  const storedStatus = window.localStorage.getItem('orbit-default-status')
+  if (storedStatus && ['todo', 'in-progress', 'done'].includes(storedStatus)) {
+    defaultStatus.value = storedStatus
+  }
+  const storedStreak = window.localStorage.getItem('orbit-show-streak')
+  if (storedStreak === '0') {
+    showStreak.value = false
+  }
   loadTasks()
 })
 </script>
 
 <template>
-  <div class="page">
-    <div class="halo halo-top" />
-    <div class="halo halo-bottom" />
+  <div class="frame">
+    <header class="global-header">
+      <div class="global-logo">orbit</div>
+      <nav class="global-nav">
+        <span
+          class="nav-chip"
+          :class="activeView === 'board' ? 'nav-chip-active' : ''"
+          @click="setView('board')"
+        >
+          board
+        </span>
+        <span
+          class="nav-chip"
+          :class="activeView === 'timeline' ? 'nav-chip-active' : ''"
+          @click="setView('timeline')"
+        >
+          timeline
+        </span>
+        <span
+          class="nav-chip"
+          :class="activeView === 'settings' ? 'nav-chip-active' : ''"
+          @click="setView('settings')"
+        >
+          settings
+        </span>
+      </nav>
+      <div class="global-profile">
+        <span class="profile-tag">J</span>
+        <span class="profile-name">Jeevan</span>
+      </div>
+    </header>
 
-    <header class="shell">
+    <div class="page">
+      <div class="halo halo-top" />
+      <div class="halo halo-bottom" />
+
+      <header class="shell">
       <div class="brand">
         <div class="brand-mark">
           <span class="brand-orbit" />
@@ -166,97 +259,235 @@ onMounted(() => {
           refresh
         </button>
       </div>
-    </header>
+      </header>
 
-    <main class="layout">
-      <section class="composer shell">
-        <div class="composer-left">
-          <input
-            v-model="draftTitle"
-            class="field title-input"
-            placeholder="Name the next tiny win"
-            maxlength="80"
-          />
-          <textarea
-            v-model="draftDescription"
-            class="field body-input"
-            rows="2"
-            placeholder="Add a one-line intention or leave it blank"
-          />
-        </div>
-        <div class="composer-right">
-          <button
-            class="primary-button"
-            @click="createTask"
-            :disabled="creating || !draftTitle.trim()"
-          >
-            <span class="pulse-dot" />
-            drop it in
-          </button>
-          <p class="hint">
-            drag cards through the orbit rings to move them
-          </p>
-        </div>
-      </section>
-
-      <p v-if="error" class="error-banner">
-        {{ error }}
-      </p>
-
-      <section class="board">
-        <article
-          v-for="column in columns"
-          :key="column.id"
-          class="column shell"
-          :class="[
-            `column-${column.id}`,
-            hoveredColumn === column.id ? 'column-hovered' : '',
-          ]"
-          @dragover.prevent="handleColumnOver"
-          @drop.prevent="handleColumnDrop(column.id)"
-          @dragenter.prevent="handleColumnEnter(column.id)"
-          @dragleave.prevent="handleColumnLeave(column.id)"
-        >
-          <header class="column-header">
-            <div class="column-label">
-              <span class="column-pill" :style="{ background: column.accent }" />
-              <span class="column-title">{{ column.title }}</span>
+      <main class="layout">
+        <template v-if="activeView === 'board'">
+          <section class="composer shell">
+            <div class="composer-left">
+              <input
+                v-model="draftTitle"
+                class="field title-input"
+                placeholder="Name the next tiny win"
+                maxlength="80"
+              />
+              <textarea
+                v-model="draftDescription"
+                class="field body-input"
+                rows="2"
+                placeholder="Add a one-line intention or leave it blank"
+              />
             </div>
-            <span class="column-count">
-              {{ columnCountLabel(column.id) }}
-            </span>
-          </header>
-
-          <div class="lane">
-            <div
-              v-for="task in columnTasks[column.id]"
-              :key="task._id"
-              class="card"
-              :class="draggedId === task._id ? 'card-dragging' : ''"
-              draggable="true"
-              @dragstart="handleDragStart(task._id, $event)"
-              @dragend="handleDragEnd"
-            >
-              <div class="card-top-row">
-                <h2 class="card-title">
-                  {{ task.title }}
-                </h2>
-                <span class="card-badge">
-                  {{ column.title }}
-                </span>
-              </div>
-              <p v-if="task.description" class="card-body">
-                {{ task.description }}
+            <div class="composer-right">
+              <button
+                class="primary-button"
+                @click="createTask"
+                :disabled="creating || !draftTitle.trim()"
+              >
+                <span class="pulse-dot" />
+                drop it in
+              </button>
+              <p class="hint">
+                drag cards through the orbit rings to move them
               </p>
             </div>
+          </section>
 
-            <p v-if="!columnTasks[column.id]?.length" class="empty-note">
-              nothing parked here yet
+          <p v-if="error" class="error-banner">
+            {{ error }}
+          </p>
+
+          <section class="board">
+            <article
+              v-for="column in columns"
+              :key="column.id"
+              class="column shell"
+              :class="[
+                `column-${column.id}`,
+                hoveredColumn === column.id ? 'column-hovered' : '',
+              ]"
+              @dragover.prevent="handleColumnOver"
+              @drop.prevent="handleColumnDrop(column.id)"
+              @dragenter.prevent="handleColumnEnter(column.id)"
+              @dragleave.prevent="handleColumnLeave(column.id)"
+            >
+              <header class="column-header">
+                <div class="column-label">
+                  <span
+                    class="column-pill"
+                    :style="{ background: column.accent }"
+                  />
+                  <span class="column-title">{{ column.title }}</span>
+                </div>
+                <span class="column-count">
+                  {{ columnCountLabel(column.id) }}
+                </span>
+              </header>
+
+              <div class="lane">
+                <div
+                  v-for="task in columnTasks[column.id]"
+                  :key="task._id"
+                  class="card"
+                  :class="draggedId === task._id ? 'card-dragging' : ''"
+                  draggable="true"
+                  @dragstart="handleDragStart(task._id, $event)"
+                  @dragend="handleDragEnd"
+                >
+                  <div class="card-top-row">
+                    <h2 class="card-title">
+                      {{ task.title }}
+                    </h2>
+                    <span class="card-badge">
+                      {{ column.title }}
+                    </span>
+                  </div>
+                  <p v-if="task.description" class="card-body">
+                    {{ task.description }}
+                  </p>
+                </div>
+
+                <p v-if="!columnTasks[column.id]?.length" class="empty-note">
+                  nothing parked here yet
+                </p>
+              </div>
+            </article>
+          </section>
+
+          <section v-if="showStreak" class="activity shell">
+            <div class="activity-header">
+              <span class="activity-title">orbit streak</span>
+              <span class="activity-sub">
+                last seven days of drops
+              </span>
+            </div>
+            <div class="activity-track">
+              <div
+                v-for="day in activityStrip"
+                :key="day.label"
+                class="activity-pill"
+                :class="{
+                  'activity-pill-low': day.count === 1,
+                  'activity-pill-mid': day.count === 2,
+                  'activity-pill-high': day.count >= 3,
+                }"
+              >
+                <span class="activity-dot" />
+                <span class="activity-label">
+                  {{ day.label }}
+                </span>
+                <span class="activity-count">
+                  {{ day.count ? day.count : '—' }}
+                </span>
+              </div>
+            </div>
+          </section>
+        </template>
+
+        <section v-else-if="activeView === 'timeline'" class="timeline shell">
+          <div class="timeline-header">
+            <span class="timeline-title">task timeline</span>
+            <span class="timeline-sub">
+              ordered by when each card was first dropped in
+            </span>
+          </div>
+          <div v-if="!timelineItems.length" class="timeline-empty">
+            No tasks yet. Drop something into the board first.
+          </div>
+          <div v-else class="timeline-list">
+            <div
+              v-for="task in timelineItems"
+              :key="task._id"
+              class="timeline-row"
+            >
+              <div class="timeline-dot" />
+              <div class="timeline-main">
+                <div class="timeline-top">
+                  <span class="timeline-task-title">{{ task.title }}</span>
+                  <span class="timeline-status">
+                    {{
+                      columns.find(column => column.id === task.status)?.title ||
+                      'Unknown'
+                    }}
+                  </span>
+                </div>
+                <div class="timeline-meta">
+                  <span>
+                    {{
+                      task.createdAt
+                        ? new Date(task.createdAt).toLocaleString()
+                        : 'no timestamp'
+                    }}
+                  </span>
+                  <span v-if="task.description" class="timeline-description">
+                    {{ task.description }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section v-else class="settings shell">
+          <div class="settings-header">
+            <span class="settings-title">board settings</span>
+            <span class="settings-sub">
+              tweak how new cards land and how the streak behaves
+            </span>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-label">
+              Default column for new tasks
+            </div>
+            <select
+              v-model="defaultStatus"
+              class="settings-select"
+              @change="persistDefaultStatus"
+            >
+              <option
+                v-for="column in columns"
+                :key="column.id"
+                :value="column.id"
+              >
+                {{ column.title }}
+              </option>
+            </select>
+            <p class="settings-help">
+              This column is used when you press the Drop it in button.
             </p>
           </div>
-        </article>
-      </section>
-    </main>
+
+          <div class="settings-group">
+            <div class="settings-label">
+              Orbit streak strip
+            </div>
+            <button
+              class="toggle"
+              :class="showStreak ? 'toggle-on' : 'toggle-off'"
+              type="button"
+              @click="
+                showStreak = !showStreak;
+                persistShowStreak();
+              "
+            >
+              <span class="toggle-thumb" />
+              <span class="toggle-text">
+                {{ showStreak ? 'Visible' : 'Hidden' }}
+              </span>
+            </button>
+            <p class="settings-help">
+              Control whether the seven day activity strip shows under the board.
+            </p>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <footer class="global-footer">
+      <span class="footer-copy">orbit board · draggable kanban</span>
+      <span class="footer-right">crafted for assignment demo</span>
+    </footer>
   </div>
 </template>
 
@@ -266,8 +497,8 @@ onMounted(() => {
 }
 
 .page {
-  min-height: 100vh;
-  padding: 24px;
+  flex: 1;
+  padding: 24px 40px 40px;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -280,6 +511,75 @@ onMounted(() => {
     sans-serif;
   position: relative;
   overflow: hidden;
+}
+
+.frame {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #050612;
+}
+
+.global-header {
+  height: 56px;
+  padding: 0 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: radial-gradient(circle at 0 0, rgba(255, 255, 255, 0.16), transparent 65%),
+    rgba(4, 5, 15, 0.98);
+}
+
+.global-logo {
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.global-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-chip {
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  opacity: 0.68;
+  cursor: pointer;
+  user-select: none;
+}
+
+.nav-chip-active {
+  border-color: rgba(255, 255, 255, 0.38);
+  opacity: 1;
+}
+
+.global-profile {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.profile-tag {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ff8ba7, #ffcd70);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: #170c24;
+}
+
+.profile-name {
+  opacity: 0.86;
 }
 
 .halo {
@@ -526,7 +826,7 @@ header.shell {
 .board {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  gap: 18px;
 }
 
 .column {
@@ -534,14 +834,11 @@ header.shell {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  transform: perspective(700px) rotateX(12deg);
-  transform-origin: top center;
-  transition: transform 140ms ease-out, box-shadow 140ms ease-out,
-    border-color 140ms ease-out;
+  transition: box-shadow 140ms ease-out, border-color 140ms ease-out,
+    background 140ms ease-out;
 }
 
 .column-hovered {
-  transform: perspective(720px) rotateX(4deg) translateY(-4px);
   border-color: rgba(255, 255, 255, 0.25);
   box-shadow:
     0 26px 60px rgba(0, 0, 0, 0.7),
@@ -646,7 +943,306 @@ header.shell {
   padding: 6px 6px 8px;
 }
 
+.activity {
+  margin-top: 4px;
+  padding: 10px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.activity-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.activity-title {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+.activity-sub {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.activity-track {
+  display: flex;
+  gap: 6px;
+}
+
+.activity-pill {
+  flex: 1 1 0;
+  border-radius: 999px;
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: radial-gradient(circle at 0 0, rgba(255, 255, 255, 0.08), transparent 60%),
+    rgba(9, 13, 28, 0.96);
+  font-size: 11px;
+}
+
+.activity-pill-low {
+  border-color: rgba(111, 199, 255, 0.6);
+}
+
+.activity-pill-mid {
+  border-color: rgba(255, 197, 122, 0.7);
+}
+
+.activity-pill-high {
+  border-color: rgba(255, 120, 178, 0.9);
+  box-shadow: 0 0 16px rgba(255, 120, 178, 0.45);
+}
+
+.activity-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #7cffd3, #fff6a6);
+}
+
+.activity-label {
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  opacity: 0.8;
+}
+
+.activity-count {
+  opacity: 0.78;
+}
+
+.timeline {
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.timeline-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.timeline-title {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+.timeline-sub {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.timeline-empty {
+  font-size: 13px;
+  opacity: 0.7;
+  padding: 10px 4px 6px;
+}
+
+.timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.timeline-row {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 10px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: radial-gradient(circle at 0 0, rgba(255, 255, 255, 0.05), transparent 60%),
+    rgba(9, 12, 28, 0.96);
+}
+
+.timeline-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  margin-top: 4px;
+  background: linear-gradient(135deg, #5cd3ff, #ff8ba7);
+  box-shadow: 0 0 14px rgba(92, 211, 255, 0.55);
+}
+
+.timeline-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.timeline-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.timeline-task-title {
+  font-size: 14px;
+  font-weight: 520;
+}
+
+.timeline-status {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  opacity: 0.78;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+
+.timeline-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  opacity: 0.76;
+}
+
+.timeline-description {
+  opacity: 0.86;
+}
+
+.settings {
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.settings-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-title {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+.settings-sub {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.settings-group {
+  border-radius: 18px;
+  padding: 12px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: radial-gradient(circle at 0 0, rgba(255, 255, 255, 0.04), transparent 60%),
+    rgba(9, 12, 28, 0.96);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-label {
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.settings-select {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(7, 10, 26, 0.9);
+  color: inherit;
+  padding: 10px 12px;
+  outline: none;
+}
+
+.settings-help {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(7, 10, 26, 0.9);
+  padding: 8px 10px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.toggle-thumb {
+  width: 26px;
+  height: 16px;
+  border-radius: 999px;
+  position: relative;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.toggle-thumb::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  transition: left 160ms ease-out, background 160ms ease-out;
+}
+
+.toggle-on .toggle-thumb {
+  background: rgba(111, 199, 255, 0.3);
+}
+
+.toggle-on .toggle-thumb::after {
+  left: 12px;
+  background: rgba(255, 205, 112, 0.92);
+}
+
+.toggle-text {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+.global-footer {
+  height: 42px;
+  padding: 0 32px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: rgba(244, 243, 255, 0.76);
+  background: rgba(3, 5, 14, 0.98);
+}
+
+.footer-copy {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.footer-right {
+  opacity: 0.8;
+}
+
 @media (max-width: 960px) {
+  .global-header {
+    padding: 0 16px;
+  }
+
   .page {
     padding: 18px 14px 20px;
   }
