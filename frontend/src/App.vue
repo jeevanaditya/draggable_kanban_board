@@ -23,7 +23,20 @@ const draftDescription = ref('')
 const draggedId = ref(null)
 const hoveredColumn = ref(null)
 
-const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:4000'
+const apiBase = (() => {
+  const fromEnv = import.meta.env.VITE_API_URL
+  if (fromEnv) return fromEnv.replace(/\/$/, '')
+
+  if (typeof window !== 'undefined') {
+    const { hostname, origin } = window.location
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:4000'
+    }
+    return origin
+  }
+
+  return 'http://localhost:4000'
+})()
 
 const columnTasks = computed(() =>
   columns.value.reduce((map, column) => {
