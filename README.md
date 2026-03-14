@@ -10,6 +10,13 @@ An interactive, drag‑and‑drop Kanban board built with Vue 3 (Composition API
 
 ---
 
+## Live Deployment
+
+- **Frontend (Vercel)**: [https://draggable-kanban-board-7cyo47wz4-jeevanaditya04-9495s-projects.vercel.app](https://draggable-kanban-board-7cyo47wz4-jeevanaditya04-9495s-projects.vercel.app)
+- **Backend API (Render)**: [https://draggable-kanban-board.onrender.com](https://draggable-kanban-board.onrender.com)
+
+---
+
 ## Tech Stack
 
 - **Frontend**: Vue 3 + Vite, Composition API, native HTML5 drag and drop
