@@ -4,6 +4,12 @@ An interactive, drag‑and‑drop Kanban board built with Vue 3 (Composition API
 
 ---
 
+## Demo
+
+[![Watch the demo](https://cdn.loom.com/sessions/thumbnails/3434194671ee41e6a40393c04e3e77fa-00001.png)](https://www.loom.com/share/3434194671ee41e6a40393c04e3e77fa)
+
+---
+
 ## Tech Stack
 
 - **Frontend**: Vue 3 + Vite, Composition API, native HTML5 drag and drop
